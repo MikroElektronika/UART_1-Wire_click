@@ -1,0 +1,8 @@
+module Click_UART1Wire_config
+
+include Click_UART1Wire_types
+
+const
+    _UART1WIRE_UART_CFG as uint32_t[1] = (9600)
+    
+end.

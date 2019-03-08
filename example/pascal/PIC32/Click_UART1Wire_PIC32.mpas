@@ -1,0 +1,117 @@
+{*
+Example for UART1Wire Click
+
+    Date          : jun 2018.
+    Author        : Katarina Perendic
+
+Test configuration PIC32 :
+    
+    MCU                : P32MX795F512L
+    Dev. Board         : EasyPIC Fusion v7
+    PIC32 Compiler ver : v4.0.0.0
+
+---
+
+Description :
+
+The application is composed of three sections :
+
+- System Initialization - Initializes UART module
+- Application Initialization - Initializes Driver init, interrupt routine and init thermo 2 click
+- Application Task - (code snippet) -  Reads the temperature from the Thermo 2 click board and logs data to UART. 
+                                       Connection between Thermo 2 and UART 1 Wire is made through 1- Wire interface. 
+                                       You can place thermo 2 click on mikrobus 2 socket and use side headers to make connection between click boards.
+
+*}
+program Click_UART1Wire_PIC32;
+
+uses Click_UART1Wire_types, Click_UART1Wire_config;
+
+var
+    readData : uint8_t; 
+    dataBuffer : array[10] of uint8_t; 
+    Temp : uint16_t; 
+    fTemp : real; 
+    demoText : array[50] of char; 
+    
+procedure systemInit(); 
+begin
+
+    mikrobus_uartInit(_MIKROBUS1, @_UART1WIRE_UART_CFG[0]); 
+    mikrobus_logInit(_LOG_USBUART_B, 9600); 
+    mikrobus_logWrite(' --- System init --- ', _LOG_LINE); 
+    Delay_ms(100); 
+
+end;
+
+procedure applicationInit(); 
+begin
+
+    uart1wire_uartDriverInit(T_UART1WIRE_P(@_MIKROBUS1_GPIO), T_UART1WIRE_P(@_MIKROBUS1_UART)); 
+    U2IP0_bit := 1; 
+    U2IP1_bit := 1; 
+    U2IP2_bit := 1; 
+    U2RXIE_bit := 1; 
+    EnableInterrupts(); 
+    uart1wire_reset(); 
+    uart1wire_goToDataMode(); 
+    Delay_10ms(); 
+    uart1wire_writeCommand(_UART1WIRE_SKIP_ROM); 
+    uart1wire_writeCommand(0x4E); 
+    uart1wire_writeCommand(0x00); 
+    uart1wire_writeCommand(0x00); 
+    uart1wire_writeCommand(0x60); 
+
+end;
+
+procedure applicationTask(); 
+begin
+
+    uart1wire_reset(); 
+    uart1wire_goToDataMode(); 
+    Delay_10ms(); 
+    uart1wire_writeCommand(_UART1WIRE_SKIP_ROM); 
+    uart1wire_writeCommand(0x44); 
+    Delay_ms(750); 
+    uart1wire_reset(); 
+    uart1wire_goToDataMode(); 
+    Delay_10ms(); 
+    uart1wire_writeCommand(_UART1WIRE_SKIP_ROM); 
+    uart1wire_writeCommand(0xBE); 
+    Delay_10ms(); 
+    uart1wire_readData(@dataBuffer[0], 8); 
+    Temp := dataBuffer[1]; 
+    Temp := (Temp shl 8); 
+    Temp := (Temp or dataBuffer[0]); 
+    fTemp := (Temp * 0.0625); 
+    mikrobus_logWrite(' Temperature : ', _LOG_TEXT); 
+    FloatToStr(fTemp, demoText); 
+    mikrobus_logWrite(demoText, _LOG_LINE); 
+    Delay_ms(1000); 
+
+end;
+
+{* INTERRUPT *}
+procedure RX_ISR();iv IVT_UART_2; ilevel 7; ics ICS_SRS; 
+begin
+
+    if ((IFS1 and (1 shl U2RXIF))) then 
+    begin
+        readData := uart1wire_readByte(); 
+        uart1wire_storage(readData, 1); 
+        U2RXIF_bit := 0; 
+    end; 
+
+end;
+
+begin
+    dataBuffer[0] := 0;
+
+    systemInit(); 
+    applicationInit(); 
+    while (1) do 
+    begin 
+        applicationTask(); 
+    end;
+
+end.
